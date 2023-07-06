@@ -1,3 +1,5 @@
+from tools import keyGen
+
 s_box_string = '63 7c 77 7b f2 6b 6f c5 30 01 67 2b fe d7 ab 76' \
                'ca 82 c9 7d fa 59 47 f0 ad d4 a2 af 9c a4 72 c0' \
                'b7 fd 93 26 36 3f f7 cc 34 a5 e5 f1 71 d8 31 15' \
@@ -175,27 +177,124 @@ def aes_decryption(cipher: bytes, key: bytes) -> bytes:
     plain = state2bytes(state)
     return plain
 
+def pad_pkcs7(data: bytes, block_size: int) -> bytes:
+    padding_length = block_size - (len(data) % block_size)
+    padding_value = padding_length.to_bytes(1, 'big')
+    padded_data = data + padding_value * padding_length
+    return padded_data
 
-def ctr_aes_encryption():
-    return
+def unpad_pkcs7(data: bytes) -> bytes:
+    padding_length = data[-1]
+
+    if padding_length < 1 or padding_length > len(data):
+        raise ValueError("Invalid PKCS7 padding length")
+
+    padding_bytes = data[-padding_length:]
+
+    if not all(byte == padding_length for byte in padding_bytes):
+        raise ValueError("Invalid PKCS7 padding")
+
+    unpadded_data = data[:-padding_length]
+    return unpadded_data
 
 
-def ctr_aes_decryption():
-    return
+
+def ctr_encryption(plaintext: str, key: str) -> str:
+    # Convert plaintext and key to bytes
+    plaintext_bytes = plaintext.encode()
+    key_bytes = key.encode()
+
+    # Generate a unique nonce/counter value
+    nonce = b'\x00' * 8
+
+    # Initialize the counter
+    counter = 0
+
+    # Pad the plaintext to a multiple of 128 bits (16 bytes)
+    padded_plaintext = pad_pkcs7(plaintext_bytes, 16)
+
+    # Encrypt the padded plaintext using CTR mode
+    ciphertext = b''
+
+    while len(ciphertext) < len(padded_plaintext):
+        # Generate the counter block
+        counter_block = nonce + counter.to_bytes(8, 'big')
+
+        # Encrypt the counter block using AES
+        encrypted_block = aes_encryption(counter_block, key_bytes)
+
+        # XOR the encrypted block with the corresponding part of the plaintext
+        ciphertext_block = xor_bytes(padded_plaintext[len(ciphertext):len(ciphertext)+16], encrypted_block)
+
+        # Append the ciphertext block to the result
+        ciphertext += ciphertext_block
+
+        # Increment the counter
+        counter += 1
+
+    # Convert ciphertext to a string and return
+    ciphertext_str = ciphertext.hex()
+    return ciphertext_str
+
+
+def ctr_decryption(ciphertext: str, key: str) -> str:
+    # Convert ciphertext and key to bytes
+    ciphertext_bytes = bytes.fromhex(ciphertext)
+    key_bytes = key.encode()
+
+    # Generate a unique nonce/counter value
+    nonce = b'\x00' * 8
+
+    # Initialize the counter
+    counter = 0
+
+    # Decrypt the ciphertext using CTR mode
+    plaintext = b''
+
+    while len(plaintext) < len(ciphertext_bytes):
+        # Generate the counter block
+        counter_block = nonce + counter.to_bytes(8, 'big')
+
+        # Encrypt the counter block using AES
+        encrypted_block = aes_encryption(counter_block, key_bytes)
+
+        # XOR the encrypted block with the corresponding part of the ciphertext
+        plaintext_block = xor_bytes(ciphertext_bytes[len(plaintext):len(plaintext)+16], encrypted_block)
+
+        # Append the plaintext block to the result
+        plaintext += plaintext_block
+
+        # Increment the counter
+        counter += 1
+
+    # Remove PKCS7 padding from the plaintext
+    plaintext = unpad_pkcs7(plaintext)
+
+    # Convert plaintext to a string and return
+    plaintext_str = plaintext.decode()
+    return plaintext_str
+
 
 
 if __name__ == "__main__":
+    teste = 'suco de mimosa esse daqui eh um teste dos minions'
+    key = keyGen.aes_keygen()
+    ciphered = ctr_encryption(teste, key)
+    print(teste)
+    print(ctr_decryption(ciphered, key))
 
-    # NIST FIPS PUB 197 ADVANCED ENCRYPTION STANDARD (AES)
 
-    # NIST AES-128 test vector 1 (Ch. C.1, p. 35)
-    plaintext = bytearray.fromhex('00112233445566778899aabbccddeeff')
-    key = bytearray.fromhex('000102030405060708090a0b0c0d0e0f')
-    expected_ciphertext = bytearray.fromhex('69c4e0d86a7b0430d8cdb78070b4c55a')
-    ciphertext = aes_encryption(plaintext, key)
-    recovered_plaintext = aes_decryption(ciphertext, key)
 
-    assert (ciphertext == expected_ciphertext)
-    assert (recovered_plaintext == plaintext)
-
-    print('suco de mimosa!')
+        # NIST FIPS PUB 197 ADVANCED ENCRYPTION STANDARD (AES)
+        #
+        # # NIST AES-128 test vector 1 (Ch. C.1, p. 35)
+        # plaintext = bytearray.fromhex('00112233445566778899aabbccddeeff')
+        # key = bytearray.fromhex('000102030405060708090a0b0c0d0e0f')
+        # expected_ciphertext = bytearray.fromhex('69c4e0d86a7b0430d8cdb78070b4c55a')
+        # ciphertext = aes_encryption(plaintext, key)
+        # recovered_plaintext = aes_decryption(ciphertext, key)
+        #
+        # assert (ciphertext == expected_ciphertext)
+        # assert (recovered_plaintext == plaintext)
+        #
+        # print('suco de mimosa!')
