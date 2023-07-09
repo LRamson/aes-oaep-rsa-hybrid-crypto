@@ -1,5 +1,3 @@
-from tools import keyGen
-
 s_box_string = '63 7c 77 7b f2 6b 6f c5 30 01 67 2b fe d7 ab 76' \
                'ca 82 c9 7d fa 59 47 f0 ad d4 a2 af 9c a4 72 c0' \
                'b7 fd 93 26 36 3f f7 cc 34 a5 e5 f1 71 d8 31 15' \
@@ -189,31 +187,36 @@ def unpad_pkcs7(data: bytes) -> bytes:
 
 
 def ctr_encryption(plaintext: str, key: str) -> str:
+    # Transform input strs into bytes
     plaintext_bytes = plaintext.encode()
     key_bytes = key.encode()
 
+    # Initialize nonce and counter
     nonce = b'\x00' * 8
     counter = 0
 
+    # Pad the plaintext
     padded_plaintext = pad_pkcs7(plaintext_bytes, 16)
 
     ciphertext = b''
 
     while len(ciphertext) < len(padded_plaintext):
+        # Makes counter_block 16 bytes, initially all 0s
         counter_block = nonce + counter.to_bytes(8, 'big')
-
+        # Encrypts counter_block
         encrypted_block = aes_encryption(counter_block, key_bytes)
-
+        # Performs a XOR operation between the encrypted block and blocks of 16 bytes of the ciphertext
         ciphertext_block = xor_bytes(padded_plaintext[len(ciphertext):len(ciphertext)+16], encrypted_block)
-
+        # Concatenates the ciphertext_block into the ciphertext
         ciphertext += ciphertext_block
-
+        # Increases counter
         counter += 1
 
     return ciphertext.hex()
 
 
 def ctr_decryption(ciphertext: str, key: str) -> str:
+    # Essentially does the same process as the function above, just changing the padding to unpadding
     ciphertext_bytes = bytes.fromhex(ciphertext)
     key_bytes = key.encode()
 
@@ -236,13 +239,4 @@ def ctr_decryption(ciphertext: str, key: str) -> str:
     plaintext = unpad_pkcs7(plaintext)
 
     return plaintext.decode()
-
-
-if __name__ == "__main__":
-    teste = 'aaaaaaa bbbbbbbb ccccccccc ddddddddd eeeeeeee fffffff gggggggg'
-    key = keyGen.aes_keygen()
-    ciphered = ctr_encryption(teste, key)
-    print(teste)
-    print(ciphered)
-    print(ctr_decryption(ciphered, key))
 

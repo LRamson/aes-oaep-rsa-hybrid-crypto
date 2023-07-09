@@ -3,31 +3,6 @@ import random
 from math import gcd
 from egcd import egcd
 
-def aes_keygen() -> str:
-    key = secrets.token_hex(16)
-    return key
-
-
-def rsa_keygen() -> ((int, int), (int, int)):
-    p = generate_prime_number()
-    q = generate_prime_number()
-    n = p * q
-    phi = (p-1) * (q-1)
-
-    while True:
-        e = random.randint(2, phi-1)
-        if gcd(e, phi) == 1:
-            break
-
-    d = egcd(e, phi)[1] % phi
-    if d < 0:
-        d += phi
-
-    private_key = (n, e)
-    public_key  = (n, d)
-
-    return public_key, private_key
-
 
 def is_prime(n: int, k: int = 40) -> bool:
     if n % 3 == 0 or n % 5 == 0 or n % 7 == 0:  #
@@ -60,3 +35,29 @@ def generate_prime_number(length: int = 1024) -> int:
         p |= (1 << length - 1) | 1  # Set MSB and LSB to 1, which makes so the number is odd and 1024 bit long
         if is_prime(p):
             return p
+
+
+def aes_keygen() -> str:
+    key = secrets.token_hex(16)
+    return key
+
+
+def rsa_keygen() -> ((int, int), (int, int)):
+    p = generate_prime_number()
+    q = generate_prime_number()
+    n = p * q
+    phi = (p-1) * (q-1)
+
+    while True:
+        e = random.randint(2, phi-1)
+        if gcd(e, phi) == 1:
+            break
+
+    d = egcd(e, phi)[1] % phi
+    if d < 0:
+        d += phi
+
+    private_key = (n, e)
+    public_key = (n, d)
+
+    return public_key, private_key
