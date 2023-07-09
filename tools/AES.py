@@ -39,10 +39,9 @@ s_box = bytearray.fromhex(s_box_string)
 
 
 def rcon(i: int) -> bytes:
-    # Wikipedia
-    rcon_lookup = bytearray.fromhex('01020408102040801b36')
-    rcon_value = bytes([rcon_lookup[i-1], 0, 0, 0])
-    return rcon_value
+    # Rcon table always returns a 4 number array, 3 of which are 0s. This only picks the first number based on a byte
+    # table that contains the first 10 numbers (the only ones used in this case)
+    return bytes([bytearray.fromhex('01020408102040801b36')[i-1], 0, 0, 0])
 
 
 def xtime(a, n=1):
@@ -51,10 +50,10 @@ def xtime(a, n=1):
     for i in range(n):
         if a & 0x80:    # Check to see if 'a' will overflow the 8 bits
             a = a << 1  # Bit-shift to double a
-            a ^= 0x1B   #
+            a ^= 0x1B   # XOR to introduce polynomial reduction - handle carry propagation
         else:
-            a = a << 1
-    return a & 0xFF
+            a = a << 1  # If it doesn't overflow, just double a
+    return a & 0xFF     # AND with 0xFF to ensure mask to 8 bits
 
 
 def key_expansion(key: bytes) -> [[[int]]]:
@@ -62,14 +61,14 @@ def key_expansion(key: bytes) -> [[[int]]]:
 
     for i in range(4, 44):
         temp = w[i-1]
-        if i % 4 == 0:
+        if i & 3 == 0:      # Same as i % 4 == 0
             temp = xor_bytes(sub_word(rot_word(list(temp))), rcon(i // 4))
         w.append(xor_bytes(w[i - 4], temp))
 
     return [w[i*4:(i+1)*4] for i in range(len(w) // 4)]
 
 
-def add_round_key(state: [[int]], key_schedule: [[[int]]], round: int): #TODO
+def add_round_key(state: [[int]], key_schedule: [[[int]]], round: int):
     round_key = key_schedule[round]
     for r in range(len(state)):
         state[r] = [state[r][c] ^ round_key[r][c] for c in range(len(state[0]))]
@@ -159,8 +158,8 @@ def aes_encryption(data: bytes, key: bytes) -> bytes:
     return cipher
 
 
-def aes_decryption(cipher: bytes, key: bytes) -> bytes:
-    state = bytes2state(cipher)
+def aes_decryption(cipher: bytes, key: bytes) -> bytes:     # Just realized this whole decryption process might
+    state = bytes2state(cipher)                             # be useless thanks to CTR... May remove later.
     key_schedule = key_expansion(key)
     add_round_key(state, key_schedule, round=10)
 
@@ -177,124 +176,73 @@ def aes_decryption(cipher: bytes, key: bytes) -> bytes:
     plain = state2bytes(state)
     return plain
 
+
 def pad_pkcs7(data: bytes, block_size: int) -> bytes:
     padding_length = block_size - (len(data) % block_size)
     padding_value = padding_length.to_bytes(1, 'big')
     padded_data = data + padding_value * padding_length
     return padded_data
 
+
 def unpad_pkcs7(data: bytes) -> bytes:
-    padding_length = data[-1]
-
-    if padding_length < 1 or padding_length > len(data):
-        raise ValueError("Invalid PKCS7 padding length")
-
-    padding_bytes = data[-padding_length:]
-
-    if not all(byte == padding_length for byte in padding_bytes):
-        raise ValueError("Invalid PKCS7 padding")
-
-    unpadded_data = data[:-padding_length]
-    return unpadded_data
-
+    return data[:-data[-1]]
 
 
 def ctr_encryption(plaintext: str, key: str) -> str:
-    # Convert plaintext and key to bytes
     plaintext_bytes = plaintext.encode()
     key_bytes = key.encode()
 
-    # Generate a unique nonce/counter value
     nonce = b'\x00' * 8
-
-    # Initialize the counter
     counter = 0
 
-    # Pad the plaintext to a multiple of 128 bits (16 bytes)
     padded_plaintext = pad_pkcs7(plaintext_bytes, 16)
 
-    # Encrypt the padded plaintext using CTR mode
     ciphertext = b''
 
     while len(ciphertext) < len(padded_plaintext):
-        # Generate the counter block
         counter_block = nonce + counter.to_bytes(8, 'big')
 
-        # Encrypt the counter block using AES
         encrypted_block = aes_encryption(counter_block, key_bytes)
 
-        # XOR the encrypted block with the corresponding part of the plaintext
         ciphertext_block = xor_bytes(padded_plaintext[len(ciphertext):len(ciphertext)+16], encrypted_block)
 
-        # Append the ciphertext block to the result
         ciphertext += ciphertext_block
 
-        # Increment the counter
         counter += 1
 
-    # Convert ciphertext to a string and return
-    ciphertext_str = ciphertext.hex()
-    return ciphertext_str
+    return ciphertext.hex()
 
 
 def ctr_decryption(ciphertext: str, key: str) -> str:
-    # Convert ciphertext and key to bytes
     ciphertext_bytes = bytes.fromhex(ciphertext)
     key_bytes = key.encode()
 
-    # Generate a unique nonce/counter value
     nonce = b'\x00' * 8
-
-    # Initialize the counter
     counter = 0
 
-    # Decrypt the ciphertext using CTR mode
     plaintext = b''
 
     while len(plaintext) < len(ciphertext_bytes):
-        # Generate the counter block
         counter_block = nonce + counter.to_bytes(8, 'big')
 
-        # Encrypt the counter block using AES
         encrypted_block = aes_encryption(counter_block, key_bytes)
 
-        # XOR the encrypted block with the corresponding part of the ciphertext
         plaintext_block = xor_bytes(ciphertext_bytes[len(plaintext):len(plaintext)+16], encrypted_block)
 
-        # Append the plaintext block to the result
         plaintext += plaintext_block
 
-        # Increment the counter
         counter += 1
 
-    # Remove PKCS7 padding from the plaintext
     plaintext = unpad_pkcs7(plaintext)
 
-    # Convert plaintext to a string and return
-    plaintext_str = plaintext.decode()
-    return plaintext_str
-
+    return plaintext.decode()
 
 
 if __name__ == "__main__":
-    teste = 'suco de mimosa esse daqui eh um teste dos minions'
+    teste = 'aaaaaaa bbbbbbbb ccccccccc ddddddddd eeeeeeee fffffff gggggggg'
     key = keyGen.aes_keygen()
     ciphered = ctr_encryption(teste, key)
     print(teste)
+    print(ciphered)
     print(ctr_decryption(ciphered, key))
 
-
-
-        # NIST FIPS PUB 197 ADVANCED ENCRYPTION STANDARD (AES)
-        #
-        # # NIST AES-128 test vector 1 (Ch. C.1, p. 35)
-        # plaintext = bytearray.fromhex('00112233445566778899aabbccddeeff')
-        # key = bytearray.fromhex('000102030405060708090a0b0c0d0e0f')
-        # expected_ciphertext = bytearray.fromhex('69c4e0d86a7b0430d8cdb78070b4c55a')
-        # ciphertext = aes_encryption(plaintext, key)
-        # recovered_plaintext = aes_decryption(ciphertext, key)
-        #
-        # assert (ciphertext == expected_ciphertext)
-        # assert (recovered_plaintext == plaintext)
-        #
-        # print('suco de mimosa!')
